@@ -1,4 +1,4 @@
-use crate::app::user::model::{User};
+use crate::app::user::model::User;
 use crate::app::user::{request::*, response::*};
 use crate::middleware::auth;
 use crate::AppState;
@@ -12,13 +12,17 @@ pub async fn signin(
         .pool
         .get()
         .expect("couldn't get db connection from pool");
+
     let (user, token) =
         web::block(move || User::signin(&conn, &form.user.email, &form.user.password))
             .await
             .map_err(|e| {
                 eprintln!("{}", e);
                 HttpResponse::InternalServerError().json(e.to_string())
-            })?;
+            })
+            .unwrap()
+            .unwrap();
+
     let res = UserResponse::from((user, token));
     Ok(HttpResponse::Ok().json(res))
 }
@@ -27,7 +31,6 @@ pub async fn signup(
     state: web::Data<AppState>,
     form: web::Json<Signup>,
 ) -> Result<HttpResponse, HttpResponse> {
-
     let conn = state
         .pool
         .get()
@@ -45,7 +48,9 @@ pub async fn signup(
     .map_err(|e| {
         eprintln!("{}", e);
         HttpResponse::InternalServerError().json(e.to_string())
-    })?;
+    })
+    .unwrap()
+    .unwrap();
 
     let res = UserResponse::from((user, token));
     Ok(HttpResponse::Ok().json(res))
@@ -54,10 +59,13 @@ pub async fn signup(
 pub async fn auth(req: HttpRequest) -> Result<HttpResponse, HttpResponse> {
     let user = auth::access_auth_user(&req);
 
-    if let Some(user) = user {
-        let user = UserResponse::from((user.to_owned(), user.generate_token()));
-        Ok(HttpResponse::Ok().json(user))
-    } else {
-        Ok(HttpResponse::Ok().json({}))
-    }
+    // TODO auth
+    // if let Some(user) = user {
+    //     let user = UserResponse::from((user.to_owned(), user.generate_token()));
+    //     Ok(HttpResponse::Ok().json(user))
+    // } else {
+    //     Ok(HttpResponse::Ok().json({}))
+    // }
+
+    Ok(HttpResponse::Ok().json({}))
 }

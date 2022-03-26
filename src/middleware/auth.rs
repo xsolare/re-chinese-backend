@@ -1,15 +1,13 @@
 use crate::app::user::model::User;
 use crate::middleware;
-use crate::utils::{token,constants};
+use crate::utils::{constants, token};
 use crate::AppState;
 use actix_service::{Service, Transform};
+use actix_web::http::header::{self, HeaderName, HeaderValue};
 use actix_web::HttpMessage;
 use actix_web::{
-    dev::ServiceRequest,
-    dev::ServiceResponse,
-    http::{HeaderName, HeaderValue, Method},
-    web::Data,
-    Error, HttpRequest, HttpResponse,
+    dev::ServiceRequest, dev::ServiceResponse, http::Method, web::Data, Error, HttpRequest,
+    HttpResponse,
 };
 use diesel::pg::PgConnection;
 use futures::future::{ok, Ready};
@@ -27,13 +25,14 @@ pub struct Authentication;
 // Middleware factory is `Transform` trait from actix-service crate
 // `S` - type of the next service
 // `B` - type of response's body
-impl<S, B> Transform<S> for Authentication
+impl<S, B> Transform<S, ServiceRequest> for Authentication
 where
-    S: Service<Request = ServiceRequest, Response = ServiceResponse<B>, Error = Error>,
+    // S: Service<Request = ServiceRequest, Response = ServiceResponse<B>, Error = Error>,
+    S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error>,
     S::Future: 'static,
     B: 'static,
 {
-    type Request = ServiceRequest;
+    // type Request = ServiceRequest;
     type Response = ServiceResponse<B>;
     type Error = Error;
     type InitError = ();
@@ -49,22 +48,26 @@ pub struct AuthenticationMiddleware<S> {
     service: S,
 }
 
-impl<S, B> Service for AuthenticationMiddleware<S>
+impl<S, B> Service<ServiceRequest> for AuthenticationMiddleware<S>
 where
-    S: Service<Request = ServiceRequest, Response = ServiceResponse<B>, Error = Error>,
+    // S: Service<Request = ServiceRequest, Response = ServiceResponse<B>, Error = Error>,
+    S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error>,
     S::Future: 'static,
     B: 'static,
 {
-    type Request = ServiceRequest;
+    // type Request = ServiceRequest;
     type Response = ServiceResponse<B>;
     type Error = Error;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>>>>;
 
-    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+    fn poll_ready(
+        self: &AuthenticationMiddleware<S>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<(), Self::Error>> {
         self.service.poll_ready(cx)
     }
 
-    fn call(&mut self, mut req: ServiceRequest) -> Self::Future {
+    fn call(self: &AuthenticationMiddleware<S>, mut req: ServiceRequest) -> Self::Future {
         if should_skip_verify(&req) || verify(&mut req) {
             let fut = self.service.call(req);
             Box::pin(async move {
@@ -72,14 +75,11 @@ where
                 Ok(res)
             })
         } else {
+            let fut = self.service.call(req);
             Box::pin(async move {
-                Ok(req.into_response(
-                    HttpResponse::Unauthorized()
-                        .json(middleware::error::ErrorResponse::from(
-                            constants::error_msg::UNAUTHRIZED,
-                        ))
-                        .into_body(),
-                ))
+                //TODO check issues
+                let res = fut.await?;
+                Ok(res)
             })
         }
     }
@@ -125,7 +125,12 @@ fn verify(req: &mut ServiceRequest) -> bool {
                                 .get()
                                 .expect("couldn't get db connection from pool");
                             let user = find_auth_user(&conn, user_id);
-                            req.head().extensions_mut().insert(user);
+
+                            //TODO put headers
+                            // req.head()
+                            // .headers()
+                            // .insert(header::SET_COOKIE, HeaderValue::from_str("user"));
+                            // req.head().extensions_mut().insert(user);
                         }
                         return true;
                     }
@@ -140,10 +145,11 @@ fn verify(req: &mut ServiceRequest) -> bool {
     false
 }
 
-pub fn access_auth_user(req: &HttpRequest) -> Option<User> {
+//TODO access_auth_user with headers
+pub fn access_auth_user(req: &HttpRequest) -> Option<HeaderValue> {
     let head = req.head();
-    let extensions = head.extensions();
-    let _user = extensions.get::<User>();
+    let headers = head.headers();
+    let _user = headers.get(header::SET_COOKIE);
     let auth_user = _user.map(|user| user.to_owned());
 
     auth_user

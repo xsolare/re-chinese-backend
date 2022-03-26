@@ -5,12 +5,13 @@ extern crate diesel;
 extern crate log;
 
 use actix_web::middleware::Logger;
+use actix_web::web::Data;
 use actix_web::{web, App, HttpServer};
 mod app;
-mod routes;
-mod utils;
 mod middleware;
+mod routes;
 mod schema;
+mod utils;
 
 use dotenv::dotenv;
 use std::env;
@@ -23,6 +24,7 @@ pub struct AppState {
 async fn main() -> std::io::Result<()> {
     dotenv().ok();
 
+    std::env::set_var("RUST_LOG", "actix_web=trace");
     std::env::set_var("RUST_LOG", "actix_web=info");
     env_logger::init();
 
@@ -32,9 +34,10 @@ async fn main() -> std::io::Result<()> {
     HttpServer::new(move || {
         let logger = Logger::default();
         let pool = utils::db::establish_connection();
+
         App::new()
             .wrap(logger)
-            .data(AppState { pool: pool })
+            .app_data(Data::new(AppState { pool: pool }))
             .wrap(middleware::cors::cors())
             .wrap(middleware::auth::Authentication)
             .service(web::scope("").configure(routes::api))

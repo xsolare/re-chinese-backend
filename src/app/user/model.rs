@@ -12,7 +12,17 @@ use jsonwebtoken::{EncodingKey, Header};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-#[derive(Identifiable, Queryable, Serialize, Deserialize, Debug, Clone, Associations)]
+#[derive(
+    Identifiable,
+    Queryable,
+    Serialize,
+    Deserialize,
+    Debug,
+    Clone,
+    Associations,
+    QueryableByName,
+    Insertable,
+)]
 #[table_name = "users"]
 pub struct User {
     pub id: Uuid,
